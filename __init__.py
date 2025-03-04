@@ -157,22 +157,38 @@ def is_legal(board, x, y):
         for dx, dy in directions
     )
 
+def extract_patterns(board):
+    colors = set()
+    for row in board.board:
+        for case in row:
+            colors.add(case.color)
+    
+    for color in colors:
+        pattern = np.zeros((board.size, board.size), dtype=bool)
+        for i in range(board.size):
+            for j in range(board.size):
+                if board.board[j][i].color == color:
+                    pattern[board.size - 1  - i, board.size - 1 - j] = True
+        print(f"Pattern for color '{color}':")
+        print(pattern)
+        print("#" * 50)
+    
 def create_board(size=7):
     board = GameBoard(size)
     colors = ['red', 'green', 'blue', 'orange', 'yellow', 'cyan', 'magenta', 'purple', 'brown', 'pink', 'yellowgreen']
     random.shuffle(colors)
-    colors = colors[:size]
+    colors_rd = colors[:size]
     
     # First, assign random colors to the board
     for row in board.board:
         for case in row:
-            case.color = random.choice(colors)
+            case.color = random.choice(colors_rd)
     
-    # Then, ensure that no two adjacent cases have the same color
+    # Then, ensure that at least two adjacent cases have the same color
     for row in board.board:
         for case in row:
             while not is_legal(board, case.x, case.y):
-                case.color = random.choice(colors)
+                case.color = random.choice(colors_rd)
     
     # Ensure the board has exactly 'size' number of colors
     used_colors = set()
@@ -181,6 +197,9 @@ def create_board(size=7):
             used_colors.add(case.color)
     if len(used_colors) != size:
         return create_board(size)
+    
+    # Ensure unique color patterns
+    extract_patterns(board)
     
     return board
 
