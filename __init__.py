@@ -1,7 +1,6 @@
 import numpy as np
-import matplotlib
+import random
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Button
 from matplotlib.widgets import RadioButtons
 
 class Case:
@@ -78,7 +77,7 @@ class GameBoardVisualizer:
         self.ax.set_xticklabels([])
         self.ax.set_yticklabels([])
         self.ax.grid(color='black', linestyle='-', linewidth=2)
-        self.rects = [[self.ax.add_patch(plt.Rectangle((j-0.5, i-0.5), 1, 1, edgecolor='black', facecolor='white')) for j in range(self.size)] for i in range(self.size)]
+        self.rects = [[self.ax.add_patch(plt.Rectangle((j-0.5, i-0.5), 1, 1, edgecolor='black', facecolor=self.game_board.board[j][i].color)) for j in range(self.size)] for i in range(self.size)]
         self.fig.canvas.mpl_connect('button_press_event', self.on_click)
         self.selected_color = 'red'
         self.add_color_buttons()
@@ -148,23 +147,50 @@ class Queen:
     def __repr__(self):
         return f'Queen({self.x}, {self.y}, {self.color})'
 
+def is_legal(board, x, y):
+    case = board.board[y][x]
+    if case.color == 'white':
+        return False
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    return any(
+        0 <= x + dx < board.size and 0 <= y + dy < board.size and board.board[y + dy][x + dx].color == case.color
+        for dx, dy in directions
+    )
+
+def create_board(size=7):
+    board = GameBoard(size)
+    colors = ['red', 'green', 'blue', 'orange', 'yellow', 'cyan', 'magenta', 'purple', 'brown', 'pink', 'yellowgreen']
+    random.shuffle(colors)
+    colors = colors[:size]
+    
+    # First, assign random colors to the board
+    for row in board.board:
+        for case in row:
+            case.color = random.choice(colors)
+    
+    # Then, ensure that no two adjacent cases have the same color
+    for row in board.board:
+        for case in row:
+            while not is_legal(board, case.x, case.y):
+                case.color = random.choice(colors)
+    
+    # Ensure the board has exactly 'size' number of colors
+    used_colors = set()
+    for row in board.board:
+        for case in row:
+            used_colors.add(case.color)
+    if len(used_colors) != size:
+        return create_board(size)
+    
+    return board
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser('Queens Game')
     parser.add_argument('-size', type=int, default=7, help='Size of the game board')
     args = parser.parse_args()
 
-    board = GameBoard(args.size)
-    visual = GameBoardVisualizer(board)
-    visual.show()
-    print(board.get_all())
-    queen_1 = Queen(board, 0, 0)
-    print(board.get_all())
-    queen_2 = Queen(board, 1, 1)
-
-
-    from pathlib import Path
-    output_dir = Path(__file__).parent / 'output'
-    output_dir.mkdir(exist_ok=True)
-    print(board.get_all())
-    np.save(output_dir / 'transformed_board.npy', board.get_all())
+    board = create_board(args.size)
+    board_visualizer = GameBoardVisualizer(board)
+    board_visualizer.show()
+    print(board.get_colors())
