@@ -70,6 +70,26 @@ class GameBoard:
             if visited != positions:
                 return self.create_voronoi_zones()
 
+    def get_colors(self):
+        return [[case.color for case in row] for row in self.board]
+
+    def save_board(self, filename):
+        with open(filename, "w") as f:
+            for row in self.board:
+                f.write(",".join([case.color for case in row]) + "\n")
+
+    def load_board(self, filename):
+        with open(filename, "r") as f:
+            for i, line in enumerate(f):
+                for j, color in enumerate(line.strip().split(",")):
+                    self.board[i][j].color = color
+
+    def reset_queens(self):
+        for row in self.board:
+            for case in row:
+                case.queen = False
+                case.is_checked = False
+
 
 class GameBoardVisualizer:
     def __init__(self, game_board):
@@ -129,11 +149,11 @@ class Queen:
     def __init__(self, game_board, x, y):
         self.game_board = game_board
         case = self.game_board.board[y][x]
+        self.x = x
+        self.y = y
+        self.color = case.color
         # First check if the case is already checked by another queen
         if not case.is_checked:
-            self.x = x
-            self.y = y
-            self.color = case.color
             case.queen = True
 
             # Check the row, column and the squares diagonally
