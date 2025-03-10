@@ -1,15 +1,11 @@
-import random
 import numpy as np
+import random
 import matplotlib.pyplot as plt
-from noise import snoise2
 from matplotlib.widgets import RadioButtons
+from scipy.spatial import Voronoi, voronoi_plot_2d
 
 
 class Case:
-    """
-    Class to represent a case in the game board.
-    """
-
     def __init__(self, x, y, color="white"):
         self.x = x
         self.y = y
@@ -18,74 +14,72 @@ class Case:
         self.is_checked = False
 
     def __repr__(self):
-        return f"({self.x}, {self.y})"
+        return f"({self.x}, {self.y}, {self.color})"
 
 
 class GameBoard:
-    """
-    Class to represent the game board for the Queens game.
-    """
-
-    def __init__(self, size=7):
+    def __init__(self, size=7, num_colors=5):
         self.size = size
+        self.num_colors = num_colors
         self.board = [[Case(x, y) for x in range(size)] for y in range(size)]
+        self.colors = [
+            "red",
+            "green",
+            "blue",
+            "orange",
+            "yellow",
+            "cyan",
+            "magenta",
+            "purple",
+            "brown",
+            "pink",
+            "yellowgreen",
+        ]
+        random.shuffle(self.colors)
+        self.colors = self.colors[:num_colors]
+        self.create_voronoi_zones()
 
-    def set_case(self, x, y, case):
-        self.board[y][x] = case
-
-    def get_colors(self):
-        transformed_board_colors = np.zeros((self.size, self.size), dtype=object)
+    def create_voronoi_zones(self):
+        points = np.random.rand(self.num_colors, 2) * self.size
+        vor = Voronoi(points)
         for i in range(self.size):
             for j in range(self.size):
-                transformed_board_colors[i, j] = self.board[i][j].color
-        return transformed_board_colors
+                distances = [np.linalg.norm([i - p[0], j - p[1]]) for p in vor.points]
+                closest_region = np.argmin(distances)
+                self.board[i][j].color = self.colors[closest_region]
 
-    def get_queens(self):
-        transformed_board_is_queen = np.zeros((self.size, self.size), dtype=bool)
+    def ensure_valid_board(self):
+        # Ensuring each color forms a single continuous region
+        color_groups = {color: set() for color in self.colors}
         for i in range(self.size):
             for j in range(self.size):
-                transformed_board_is_queen[i, j] = self.board[i][j].queen
-        return transformed_board_is_queen
+                color_groups[self.board[i][j].color].add((i, j))
 
-    def get_checked(self):
-        transformed_board_is_checked = np.zeros((self.size, self.size), dtype=bool)
-        for i in range(self.size):
-            for j in range(self.size):
-                transformed_board_is_checked[i, j] = self.board[i][j].is_checked
-        return transformed_board_is_checked
-
-    def get_all(self):
-        return self.get_colors(), self.get_queens(), self.get_checked()
+        for color, positions in color_groups.items():
+            visited = set()
+            stack = [next(iter(positions))]
+            while stack:
+                cx, cy = stack.pop()
+                if (cx, cy) in visited:
+                    continue
+                visited.add((cx, cy))
+                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    nx, ny = cx + dx, cy + dy
+                    if (nx, ny) in positions and (nx, ny) not in visited:
+                        stack.append((nx, ny))
+            if visited != positions:
+                return self.create_voronoi_zones()
 
 
 class GameBoardVisualizer:
-    """
-    Class to handle the visualization and interaction of the game board.
-    """
-
-    color_map = {
-        "Red": "red",
-        "Green": "green",
-        "Blue": "blue",
-        "Orange": "orange",
-        "Yellow": "yellow",
-        "Cyan": "cyan",
-        "Magenta": "magenta",
-        "Purple": "purple",
-        "Brown": "brown",
-        "Pink": "pink",
-        "Yellowgreen": "yellowgreen",
-        "White": "white",
-    }
-
     def __init__(self, game_board):
         self.game_board = game_board
         self.size = game_board.size
-        self.fig, self.ax = plt.subplots(figsize=(12, 12))
+        self.fig, self.ax = plt.subplots(figsize=(8, 8))
         self.ax.set_xticks(np.arange(-0.5, self.size, 1))
-        self.ax.set_yticks(np.arange(-0.5, self.size, 1))
-        self.ax.set_xticklabels([])
         self.ax.set_yticklabels([])
+        self.ax.set_xticklabels([])
+        self.ax.set_yticks(np.arange(-0.5, self.size, 1))
         self.ax.grid(color="black", linestyle="-", linewidth=2)
         self.rects = [
             [
@@ -95,7 +89,7 @@ class GameBoardVisualizer:
                         1,
                         1,
                         edgecolor="black",
-                        facecolor=self.game_board.board[j][i].color,
+                        facecolor=self.game_board.board[i][j].color,
                     )
                 )
                 for j in range(self.size)
@@ -115,12 +109,12 @@ class GameBoardVisualizer:
                 self.fig.canvas.draw()
 
     def select_color(self, event):
-        self.selected_color = self.color_map[event]
+        self.selected_color = event
         self.fig.canvas.draw()
 
     def add_color_buttons(self):
         axcolor = plt.axes([0.90, 0.05, 0.1, 0.2], frameon=False)
-        self.radio = RadioButtons(axcolor, list(self.color_map.keys()))
+        self.radio = RadioButtons(axcolor, self.game_board.colors)
         self.radio.on_clicked(self.select_color)
 
     def show(self):
@@ -174,52 +168,27 @@ class Queen:
         return f"Queen({self.x}, {self.y}, {self.color})"
 
 
-def worley_noise(width, height, scale):
-    noise = np.zeros((width, height))
-    for x in range(width):
-        for y in range(height):
-            noise[x][y] = snoise2(x / scale, y / scale, octaves=1)
-    return noise
-
-
-def generate_board(noise, num_regions):
-    # Normalize noise to range [0, 1]
-    noise = (noise - noise.min()) / (noise.max() - noise.min())
-
-    # Create discrete regions
-    regions = np.floor(noise * num_regions).astype(int)
-
-    # Generate a unique color for each region
-    colors = plt.cm.get_cmap("tab20", num_regions)
-    board = colors(regions)
-
-    return board
-
-
-def create_board(size=7):
-    scale = 10.0  # Adjust the scale for a smaller board
-    num_regions = size  # Number of unique color zones
-
-    noise = worley_noise(size, size, scale)
-    board_colors = generate_board(noise, num_regions)
-
-    board = GameBoard(size)
-    for x in range(size):
-        for y in range(size):
-            color = board_colors[x, y]
-            board.set_case(x, y, Case(x, y, color=color))
-
-    return board
+def is_legal(board, x, y):
+    case = board.board[y][x]
+    if case.color == "white":
+        return False
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    return any(
+        0 <= x + dx < board.size
+        and 0 <= y + dy < board.size
+        and board.board[y + dy][x + dx].color == case.color
+        for dx, dy in directions
+    )
 
 
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser("Queens Game")
-    parser.add_argument("-size", type=int, default=7, help="Size of the game board")
+    parser = argparse.ArgumentParser("Queens game")
+    parser.add_argument("--size", type=int, default=7)
     args = parser.parse_args()
 
-    board = create_board(args.size)
-    board_visualizer = GameBoardVisualizer(board)
-    board_visualizer.show()
-    print(board.get_colors())
+    board = GameBoard(size=args.size, num_colors=args.size)
+    board.ensure_valid_board()
+    visualizer = GameBoardVisualizer(board)
+    visualizer.show()
