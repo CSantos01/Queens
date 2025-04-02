@@ -1,6 +1,7 @@
-import numpy as np
 import random
+
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.widgets import RadioButtons
 from scipy.spatial import Voronoi, voronoi_plot_2d
 
@@ -18,26 +19,16 @@ class Case:
 
 
 class GameBoard:
-    def __init__(self, size=7, num_colors=5):
+    def __init__(self, size=7):
         self.size = size
-        self.num_colors = num_colors
+        self.num_colors = size
         self.board = [[Case(x, y) for x in range(size)] for y in range(size)]
-        self.colors = [
-            "red",
-            "green",
-            "blue",
-            "orange",
-            "yellow",
-            "cyan",
-            "magenta",
-            "purple",
-            "brown",
-            "pink",
-            "yellowgreen",
-        ]
+        cmap = plt.get_cmap("hsv", self.num_colors)
+        self.colors = [cmap(i) for i in range(self.num_colors)]
         random.shuffle(self.colors)
-        self.colors = self.colors[:num_colors]
+        self.colors = self.colors[:size]
         self.create_voronoi_zones()
+        self.ensure_valid_board()
 
     def create_voronoi_zones(self):
         points = np.random.rand(self.num_colors, 2) * self.size
@@ -57,7 +48,10 @@ class GameBoard:
 
         for color, positions in color_groups.items():
             visited = set()
-            stack = [next(iter(positions))]
+            if positions:
+                stack = [next(iter(positions))]
+            else:
+                continue
             while stack:
                 cx, cy = stack.pop()
                 if (cx, cy) in visited:
@@ -68,10 +62,23 @@ class GameBoard:
                     if (nx, ny) in positions and (nx, ny) not in visited:
                         stack.append((nx, ny))
             if visited != positions:
-                return self.create_voronoi_zones()
+                self.create_voronoi_zones()
+                return (
+                    self.ensure_valid_board()
+                )  # Ensuring validation after regeneration
+
+        # Ensuring there are exactly self.num_colors colors
+        unique_colors = set(case.color for row in self.board for case in row)
+        print(len(unique_colors))
 
     def get_colors(self):
         return [[case.color for case in row] for row in self.board]
+
+    def get_checked(self):
+        return [[case.is_checked for case in row] for row in self.board]
+
+    def get_queens(self):
+        return [[case.queen for case in row] for row in self.board]
 
     def save_board(self, filename):
         with open(filename, "w") as f:
@@ -89,56 +96,6 @@ class GameBoard:
             for case in row:
                 case.queen = False
                 case.is_checked = False
-
-
-class GameBoardVisualizer:
-    def __init__(self, game_board):
-        self.game_board = game_board
-        self.size = game_board.size
-        self.fig, self.ax = plt.subplots(figsize=(8, 8))
-        self.ax.set_xticks(np.arange(-0.5, self.size, 1))
-        self.ax.set_yticklabels([])
-        self.ax.set_xticklabels([])
-        self.ax.set_yticks(np.arange(-0.5, self.size, 1))
-        self.ax.grid(color="black", linestyle="-", linewidth=2)
-        self.rects = [
-            [
-                self.ax.add_patch(
-                    plt.Rectangle(
-                        (j - 0.5, i - 0.5),
-                        1,
-                        1,
-                        edgecolor="black",
-                        facecolor=self.game_board.board[i][j].color,
-                    )
-                )
-                for j in range(self.size)
-            ]
-            for i in range(self.size)
-        ]
-        self.fig.canvas.mpl_connect("button_press_event", self.on_click)
-        self.selected_color = "red"
-        self.add_color_buttons()
-
-    def on_click(self, event):
-        if event.inaxes == self.ax:
-            x, y = int(event.xdata + 0.5), int(event.ydata + 0.5)
-            if 0 <= x < self.size and 0 <= y < self.size:
-                self.game_board.board[y][x].color = self.selected_color
-                self.rects[y][x].set_facecolor(self.selected_color)
-                self.fig.canvas.draw()
-
-    def select_color(self, event):
-        self.selected_color = event
-        self.fig.canvas.draw()
-
-    def add_color_buttons(self):
-        axcolor = plt.axes([0.90, 0.05, 0.1, 0.2], frameon=False)
-        self.radio = RadioButtons(axcolor, self.game_board.colors)
-        self.radio.on_clicked(self.select_color)
-
-    def show(self):
-        plt.show()
 
 
 class Queen:
@@ -182,23 +139,73 @@ class Queen:
                         self.game_board.board[j][i].is_checked = True
 
         else:
-            print("The case is already checked by another queen")
+            raise KeyError("Case already checked by another queen")
 
     def __repr__(self):
         return f"Queen({self.x}, {self.y}, {self.color})"
 
 
-def is_legal(board, x, y):
-    case = board.board[y][x]
-    if case.color == "white":
-        return False
-    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-    return any(
-        0 <= x + dx < board.size
-        and 0 <= y + dy < board.size
-        and board.board[y + dy][x + dx].color == case.color
-        for dx, dy in directions
-    )
+class GameBoardVisualizer:
+    def __init__(self, game_board):
+        self.game_board = game_board
+        self.size = game_board.size
+        self.fig, self.ax = plt.subplots(figsize=(8, 8))
+        self.ax.set_xticks(np.arange(-0.5, self.size, 1))
+        self.ax.set_yticklabels([])
+        self.ax.set_xticklabels([])
+        self.ax.set_yticks(np.arange(-0.5, self.size, 1))
+        self.ax.grid(color="black", linestyle="-", linewidth=2)
+        self.rects = [
+            [
+                self.ax.add_patch(
+                    plt.Rectangle(
+                        (j - 0.5, i - 0.5),
+                        1,
+                        1,
+                        edgecolor="black",
+                        facecolor=self.game_board.board[i][j].color,
+                    )
+                )
+                for j in range(self.size)
+            ]
+            for i in range(self.size)
+        ]
+        self.fig.canvas.mpl_connect("button_press_event", self.on_click)
+        self.selected_action = "dot"
+        self.add_action_buttons()
+
+    def on_click(self, event):
+        if event.inaxes == self.ax:
+            x, y = int(event.xdata + 0.5), int(event.ydata + 0.5)
+            print(f"Clicked on {x}, {y}")
+            if 0 <= x < self.size and 0 <= y < self.size:
+                if self.selected_action == "queen":
+                    Queen(self.game_board, x, y)
+                    self.ax.imshow(
+                        plt.imread("Pics/queen.png"),
+                        extent=(x - 0.5, x + 0.5, y + 0.5, y - 0.5),
+                        aspect="auto",
+                    )
+                elif self.selected_action == "dot":
+                    self.game_board.board[y][x].is_checked = True
+                    self.ax.imshow(
+                        plt.imread("Pics/dot.png"),
+                        extent=(x - 0.5, x + 0.5, y - 0.5, y + 0.5),
+                        aspect="auto",
+                    )
+                self.fig.canvas.draw()
+
+    def select_action(self, event):
+        self.selected_action = event
+        self.fig.canvas.draw()
+
+    def add_action_buttons(self):
+        axaction = plt.axes([0.90, 0.05, 0.1, 0.2], frameon=False)
+        self.radio = RadioButtons(axaction, ["dot", "queen"])
+        self.radio.on_clicked(self.select_action)
+
+    def show(self):
+        plt.show()
 
 
 if __name__ == "__main__":
@@ -208,7 +215,6 @@ if __name__ == "__main__":
     parser.add_argument("--size", type=int, default=7)
     args = parser.parse_args()
 
-    board = GameBoard(size=args.size, num_colors=args.size)
-    board.ensure_valid_board()
+    board = GameBoard(size=args.size)
     visualizer = GameBoardVisualizer(board)
     visualizer.show()
