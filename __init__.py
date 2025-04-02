@@ -67,10 +67,6 @@ class GameBoard:
                     self.ensure_valid_board()
                 )  # Ensuring validation after regeneration
 
-        # Ensuring there are exactly self.num_colors colors
-        unique_colors = set(case.color for row in self.board for case in row)
-        print(len(unique_colors))
-
     def get_colors(self):
         return [[case.color for case in row] for row in self.board]
 
@@ -184,14 +180,14 @@ class GameBoardVisualizer:
                     self.ax.imshow(
                         plt.imread("Pics/queen.png"),
                         extent=(x - 0.5, x + 0.5, y + 0.5, y - 0.5),
-                        aspect="auto",
+                        # aspect="auto",
                     )
                 elif self.selected_action == "dot":
                     self.game_board.board[y][x].is_checked = True
                     self.ax.imshow(
                         plt.imread("Pics/dot.png"),
                         extent=(x - 0.5, x + 0.5, y - 0.5, y + 0.5),
-                        aspect="auto",
+                        # aspect="auto",
                     )
                 self.fig.canvas.draw()
 

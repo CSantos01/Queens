@@ -1,25 +1,26 @@
-from __init__ import GameBoard, Queen
-import numpy as np
 import random
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
 from collections import deque
 from pathlib import Path
 
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+
+from __init__ import GameBoard, Queen
 
 # Board Settings
 BOARD_SIZE = 7
-NUM_COLORS = 5
 MAX_EPISODES = 1000
 
 
 class QueenEnv:
-    def __init__(self, size=BOARD_SIZE, num_colors=NUM_COLORS):
+    def __init__(self, size=BOARD_SIZE):
         self.size = size
-        self.num_colors = num_colors
-        self.board = GameBoard(size=size, num_colors=num_colors)
+        self.num_colors = size
+        self.board = GameBoard(size=size)
+        self.queens = []
         self.reset()
 
     def reset(self):
@@ -30,37 +31,20 @@ class QueenEnv:
 
     def get_state(self):
         """Returns a 3-channel representation of the board"""
-        attack_zones = self.get_attack_zones()
-        color_list = self.board.colors
-        color_map = {color: i for i, color in enumerate(color_list)}
-        colors = np.vectorize(color_map.get)(self.board.get_colors())
-        queens = np.zeros((self.size, self.size))
-        for queen in self.queens:
-            queens[queen.y][queen.x] = 1
+        attack_zones = self.board.get_checked()
+        colors = self.board.get_colors()
+        unique_colors = {color for row in colors for color in row}
+        color_map = {color: i for i, color in enumerate(unique_colors)}
+        colors = np.array(
+            [[color_map[color] for color in row] for row in colors], dtype=np.int32
+        )
+        queens = self.board.get_queens()
         return np.stack([queens, colors, attack_zones], axis=0)
-
-    def get_attack_zones(self):
-        """Computes attacked positions"""
-        attack_zones = np.zeros((self.size, self.size))
-        for queen in self.queens:
-            qx, qy = queen.x, queen.y
-            for i in range(self.size):
-                attack_zones[qy][i] = 1  # Row
-                attack_zones[i][qx] = 1  # Column
-            if 0 <= qy + 1 < self.size and 0 <= qx + 1 < self.size:
-                attack_zones[qy + 1][qx + 1] = 1  # Diagonal
-            if 0 <= qy - 1 < self.size and 0 <= qx - 1 < self.size:
-                attack_zones[qy - 1][qx - 1] = 1  # Diagonal
-            if 0 <= qy + 1 < self.size and 0 <= qx - 1 < self.size:
-                attack_zones[qy + 1][qx - 1] = 1  # Anti-diagonal
-            if 0 <= qy - 1 < self.size and 0 <= qx + 1 < self.size:
-                attack_zones[qy - 1][qx + 1] = 1  # Anti-diagonal
-        return attack_zones
 
     def step(self, action):
         """Takes an action (place queen) and returns new state, reward, and done flag"""
         x, y = divmod(action, self.size)
-        if self.board.board[y][x].queen or self.get_attack_zones()[y][x] == 1:
+        if self.board.board[y][x].queen or self.board.board[y][x].is_checked:
             return self.get_state(), -1, True  # Invalid move
 
         queen = Queen(self.board, x, y)
@@ -74,7 +58,8 @@ class QueenEnv:
             (x, y)
             for x in range(self.size)
             for y in range(self.size)
-            if not self.board.board[y][x].queen and self.get_attack_zones()[y][x] == 0
+            if not self.board.board[y][x].queen
+            and not self.board.board[y][x].is_checked()
         ]
 
 
@@ -92,7 +77,7 @@ class DQN(nn.Module):
         return self.fc3(x)
 
 
-def training(board_size=BOARD_SIZE, num_colors=NUM_COLORS, max_episodes=MAX_EPISODES):
+def training(board_size=BOARD_SIZE, max_episodes=MAX_EPISODES):
     # Training Loop
     env = QueenEnv()
     dqn = DQN(BOARD_SIZE * BOARD_SIZE * 3, BOARD_SIZE * BOARD_SIZE)
